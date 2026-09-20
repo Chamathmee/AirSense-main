@@ -14,3 +14,13 @@ button { cursor: pointer; }
 @media (max-width: 420px) { .gauge-row { display: block; }.gauge-wrap { margin: 0 auto; }.aqi-scale { justify-content: center; padding-bottom: 8px; }.category-grid, .pollutant-grid { grid-template-columns: 1fr; }.section-heading h2 { font-size: 17px; } }
 @media (prefers-reduced-motion: no-preference) { button { transition: transform .2s, border-color .2s, background .2s; } button:active { transform: translateY(1px); } }
 @layer base { * { border-color: var(--line); } }
+
+.result-card.result-green { border-color: rgba(101, 214, 161, .45); background: linear-gradient(145deg, rgba(32, 102, 91, .88), rgba(16, 56, 69, .96)); }
+.result-card.result-green .result-head > svg { color: var(--green); }
+.result-card.result-amber { border-color: rgba(244, 189, 88, .5); background: linear-gradient(145deg, rgba(105, 83, 48, .88), rgba(34, 51, 61, .97)); }
+.result-card.result-amber .result-head > svg { color: var(--amber); }
+.result-card.result-red { border-color: rgba(231, 119, 119, .55); background: linear-gradient(145deg, rgba(105, 53, 64, .9), rgba(42, 34, 47, .98)); }
+.result-card.result-red .result-head > svg { color: var(--red); }
+.app-shell.state-green { --cyan: #65d6a1; --line: rgba(101, 214, 161, .22); }
+.app-shell.state-amber { --cyan: #f4bd58; --line: rgba(244, 189, 88, .24); }
+.app-shell.state-red { --cyan: #e77777; --line: rgba(231, 119, 119, .25); }
