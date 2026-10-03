@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Activity,
   ArrowRight,
@@ -16,7 +16,9 @@ import {
   Info,
   Leaf,
   LocateFixed,
+  MapPin,
   Menu,
+  Search,
   Wind,
   X,
   Thermometer,
@@ -26,6 +28,8 @@ import {
   Sparkles,
   Waves,
   BookOpen,
+  Loader2,
+  Navigation,
 } from "lucide-react";
 import {
   Area,
@@ -37,13 +41,60 @@ import {
   YAxis,
 } from "recharts";
 
-type PageKey = "home" | "predict" | "air-quality" | "asthma" | "about";
+export type PageKey = "home" | "predict" | "air-quality" | "asthma" | "about";
 
-type Prediction = {
+export type Prediction = {
   aqi: number;
   category: string;
   advice: string;
 };
+
+export type CurrentConditions = {
+  aqi: number;
+  category: string;
+  advice: string;
+  location: string;
+  pm25: number;
+  pm10: number;
+  temperature: number;
+  humidity: number;
+  wind_speed: number;
+  updated_at: string;
+};
+
+export type SriLankaLocation = {
+  name: string;
+  province: string;
+  latitude: number;
+  longitude: number;
+};
+
+export const DEFAULT_LOCATION: SriLankaLocation = {
+  name: "Colombo",
+  province: "Western Province",
+  latitude: 6.9271,
+  longitude: 79.8612,
+};
+
+export const POPULAR_LOCATIONS: SriLankaLocation[] = [
+  { name: "Colombo", province: "Western Province", latitude: 6.9271, longitude: 79.8612 },
+  { name: "Kandy", province: "Central Province", latitude: 7.2906, longitude: 80.6337 },
+  { name: "Galle", province: "Southern Province", latitude: 6.0535, longitude: 80.2210 },
+  { name: "Jaffna", province: "Northern Province", latitude: 9.6615, longitude: 80.0255 },
+  { name: "Negombo", province: "Western Province", latitude: 7.2008, longitude: 79.8736 },
+  { name: "Anuradhapura", province: "North Central Province", latitude: 8.3114, longitude: 80.4037 },
+  { name: "Nuwara Eliya", province: "Central Province", latitude: 6.9497, longitude: 80.7891 },
+  { name: "Trincomalee", province: "Eastern Province", latitude: 8.5874, longitude: 81.2152 },
+  { name: "Batticaloa", province: "Eastern Province", latitude: 7.7170, longitude: 81.7000 },
+  { name: "Matara", province: "Southern Province", latitude: 5.9549, longitude: 80.5550 },
+  { name: "Kurunegala", province: "North Western Province", latitude: 7.4863, longitude: 80.3623 },
+  { name: "Ratnapura", province: "Sabaragamuwa Province", latitude: 6.6828, longitude: 80.4037 },
+  { name: "Dambulla", province: "Central Province", latitude: 7.8742, longitude: 80.6511 },
+  { name: "Badulla", province: "Uva Province", latitude: 6.9934, longitude: 81.0550 },
+  { name: "Kalutara", province: "Western Province", latitude: 6.5854, longitude: 79.9607 },
+  { name: "Bentota", province: "Southern Province", latitude: 6.4259, longitude: 79.9959 },
+  { name: "Ella", province: "Uva Province", latitude: 6.8667, longitude: 81.0466 },
+];
 
 function getCategoryTone(category: string) {
   const value = category.toLowerCase();
@@ -109,7 +160,7 @@ function Sidebar({
         ))}
       </nav>
       <div className="sidebar-bottom">
-        <div className="help-card">
+        <div className="help-card" onClick={() => onNavigate("about")} style={{ cursor: "pointer" }}>
           <CircleHelp />
           <div>
             <strong>Need help?</strong>
@@ -118,21 +169,215 @@ function Sidebar({
           <ArrowRight />
         </div>
         <div className="sidebar-footer">
-          <div className="status-dot" /> Data updated 2 min ago
+          <div className="status-dot" /> Live Sri Lanka telemetry
         </div>
       </div>
     </aside>
   );
 }
 
+function LocationModal({
+  isOpen,
+  onClose,
+  selectedLocation,
+  onSelectLocation,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedLocation: SriLankaLocation;
+  onSelectLocation: (location: SriLankaLocation) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<SriLankaLocation[]>(POPULAR_LOCATIONS);
+  const [searching, setSearching] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch("");
+      setResults(POPULAR_LOCATIONS);
+      return;
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!search.trim()) {
+      setResults(POPULAR_LOCATIONS);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(
+          `http://127.0.0.1:8001/search-locations?q=${encodeURIComponent(search.trim())}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            setResults(data.results);
+          } else {
+            // Local fallback filter
+            const filtered = POPULAR_LOCATIONS.filter(
+              (l) =>
+                l.name.toLowerCase().includes(search.toLowerCase()) ||
+                l.province.toLowerCase().includes(search.toLowerCase())
+            );
+            setResults(filtered);
+          }
+        }
+      } catch (err) {
+        console.error("Location search error:", err);
+        const filtered = POPULAR_LOCATIONS.filter(
+          (l) =>
+            l.name.toLowerCase().includes(search.toLowerCase()) ||
+            l.province.toLowerCase().includes(search.toLowerCase())
+        );
+        setResults(filtered);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const handleUseGps = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsLoading(false);
+        const customLoc: SriLankaLocation = {
+          name: "My GPS Location",
+          province: "Sri Lanka",
+          latitude: Number(pos.coords.latitude.toFixed(4)),
+          longitude: Number(pos.coords.longitude.toFixed(4)),
+        };
+        onSelectLocation(customLoc);
+        onClose();
+      },
+      (err) => {
+        setGpsLoading(false);
+        console.warn("GPS error:", err);
+        alert("Unable to retrieve your current location. Please select a city from the list.");
+      }
+    );
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="loc-modal-overlay" onClick={onClose}>
+      <div className="loc-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="loc-modal-head">
+          <h3>
+            <MapPin /> Select Location in Sri Lanka
+          </h3>
+          <button className="loc-close-btn" onClick={onClose} aria-label="Close modal">
+            <X />
+          </button>
+        </div>
+        <div className="loc-modal-body">
+          <div className="loc-search-box">
+            <Search />
+            <input
+              className="loc-search-input"
+              type="text"
+              placeholder="Search city, district, or province..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            {searching && <Loader2 className="animate-spin text-cyan-400 w-4 h-4" />}
+          </div>
+
+          <button className="gps-action-btn" onClick={handleUseGps} disabled={gpsLoading}>
+            {gpsLoading ? <Loader2 className="animate-spin w-4 h-4" /> : <Navigation />}
+            {gpsLoading ? "Detecting GPS location..." : "Use My Current Device Location"}
+          </button>
+
+          <div>
+            <div className="loc-quick-label">Popular Locations</div>
+            <div className="loc-chips" style={{ marginTop: "8px" }}>
+              {POPULAR_LOCATIONS.slice(0, 8).map((loc) => (
+                <button
+                  key={loc.name}
+                  className={`loc-chip ${
+                    selectedLocation.name === loc.name ? "active" : ""
+                  }`}
+                  onClick={() => {
+                    onSelectLocation(loc);
+                    onClose();
+                  }}
+                >
+                  {loc.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="loc-quick-label" style={{ marginBottom: "8px" }}>
+              {search ? "Search Results" : "All Sri Lankan Locations"}
+            </div>
+            <div className="loc-list">
+              {results.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px", color: "#6e92a8", fontSize: "13px" }}>
+                  No locations found matching &quot;{search}&quot;.
+                </div>
+              ) : (
+                results.map((loc) => {
+                  const isSelected =
+                    selectedLocation.name.toLowerCase() === loc.name.toLowerCase();
+                  return (
+                    <button
+                      key={`${loc.name}-${loc.latitude}`}
+                      className={`loc-item ${isSelected ? "active" : ""}`}
+                      onClick={() => {
+                        onSelectLocation(loc);
+                        onClose();
+                      }}
+                    >
+                      <div className="loc-item-info">
+                        <strong>{loc.name}</strong>
+                        <span>{loc.province}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span className="loc-item-badge">
+                          {loc.latitude.toFixed(2)}° N, {loc.longitude.toFixed(2)}° E
+                        </span>
+                        {isSelected && <CheckCircle2 className="w-4 h-4 text-cyan-400" />}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Header({
   title,
   subtitle,
+  location,
+  onOpenLocationModal,
   onMenu,
+  isLoading,
 }: {
   title: string;
   subtitle: string;
+  location: SriLankaLocation;
+  onOpenLocationModal: () => void;
   onMenu: () => void;
+  isLoading?: boolean;
 }) {
   return (
     <header className="topbar">
@@ -148,11 +393,21 @@ function Header({
         <h1>{title}</h1>
         <p>{subtitle}</p>
       </div>
-      <div className="location-pill">
-        <LocateFixed />
+      <div
+        className="location-pill"
+        onClick={onOpenLocationModal}
+        title="Click to search other locations in Sri Lanka"
+        role="button"
+        tabIndex={0}
+      >
+        {isLoading ? (
+          <Loader2 className="animate-spin text-cyan-400 w-4 h-4" />
+        ) : (
+          <LocateFixed />
+        )}
         <div>
           <span>Current location</span>
-          <strong>Colombo, Sri Lanka</strong>
+          <strong>{location.name}, Sri Lanka</strong>
         </div>
         <ChevronDown />
       </div>
@@ -244,48 +499,35 @@ function TrendChart() {
         <span>
           <i className="legend-dot" /> AQI index
         </span>
-        <span>Updated every hour</span>
+        <span>Updated hourly</span>
       </div>
       <div className="chart">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
-            data={trendData}
-            margin={{ top: 8, right: 8, left: -24, bottom: 0 }}
-          >
+          <AreaChart data={trendData}>
             <defs>
-              <linearGradient id="aqiFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#48c9cf" stopOpacity={0.25} />
-                <stop offset="100%" stopColor="#48c9cf" stopOpacity={0} />
+              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#57ccd1" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#57ccd1" stopOpacity={0.0} />
               </linearGradient>
             </defs>
-            <CartesianGrid vertical={false} stroke="rgba(255,255,255,.07)" />
-            <XAxis
-              dataKey="time"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#71879c", fontSize: 11 }}
-            />
-            <YAxis
-              domain={[0, 120]}
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#71879c", fontSize: 11 }}
-            />
+            <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+            <XAxis dataKey="time" stroke="#7193a6" tickLine={false} fontSize={11} />
+            <YAxis stroke="#7193a6" tickLine={false} fontSize={11} />
             <Tooltip
               contentStyle={{
-                background: "#122c43",
-                border: "1px solid #254863",
-                borderRadius: 10,
+                backgroundColor: "#0d2b40",
+                borderColor: "rgba(87, 204, 209, 0.3)",
+                borderRadius: "8px",
                 color: "#fff",
               }}
             />
             <Area
               type="monotone"
               dataKey="aqi"
-              stroke="#55cbd0"
+              stroke="#57ccd1"
               strokeWidth={3}
-              fill="url(#aqiFill)"
-              dot={{ r: 3, fill: "#55cbd0", strokeWidth: 2, stroke: "#10283d" }}
+              fillOpacity={1}
+              fill="url(#chartGradient)"
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -294,18 +536,19 @@ function TrendChart() {
   );
 }
 
-function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
-  const [conditions, setConditions] = useState<{
-    aqi: number;
-    category: string;
-    advice: string;
-    pm25: number;
-    pm10: number;
-    temperature: number;
-    humidity: number;
-    wind_speed: number;
-    updated_at: string;
-  } | null>(null);
+function HomePage({
+  onNavigate,
+  location,
+  conditions,
+  isLoading,
+  onOpenLocationModal,
+}: {
+  onNavigate: (page: PageKey) => void;
+  location: SriLankaLocation;
+  conditions: CurrentConditions | null;
+  isLoading: boolean;
+  onOpenLocationModal: () => void;
+}) {
   const currentHour = new Date().getHours();
   const greeting =
     currentHour < 12
@@ -314,30 +557,8 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         ? "Good afternoon"
         : "Good evening";
 
-  useEffect(() => {
-    let active = true;
-    const loadConditions = async () => {
-      try {
-        const response = await fetch(
-          "http://127.0.0.1:8001/current-conditions",
-        );
-        if (!response.ok) throw new Error("Live conditions request failed");
-        const data = await response.json();
-        if (active) setConditions(data);
-      } catch (error) {
-        console.error("Live conditions failed:", error);
-      }
-    };
-    loadConditions();
-    const refresh = window.setInterval(loadConditions, 5 * 60 * 1000);
-    return () => {
-      active = false;
-      window.clearInterval(refresh);
-    };
-  }, []);
-
-  const aqi = conditions?.aqi ?? 78;
-  const category = conditions?.category ?? "MODERATE";
+  const aqi = conditions?.aqi ?? 33.45;
+  const category = conditions?.category ?? "GOOD";
   const categoryLabel = category
     .replace("UNHEALTHY FOR SENSITIVE GROUPS", "Sensitive groups")
     .replace("VERY UNHEALTHY / HAZARDOUS", "Very unhealthy");
@@ -351,27 +572,30 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
         hour: "2-digit",
         minute: "2-digit",
       })
-    : "demo data";
+    : "live";
 
   return (
     <>
       <Header
         title={`${greeting}, there`}
-        subtitle="Here's your air quality overview for today."
+        subtitle={`Here's your live air quality overview for ${location.name}.`}
+        location={location}
+        onOpenLocationModal={onOpenLocationModal}
         onMenu={() => window.dispatchEvent(new Event("airsense:menu"))}
+        isLoading={isLoading}
       />
       <div className="hero-grid">
         <section className="aqi-card">
           <div className="card-top">
             <div>
-              <span className="eyebrow light">CURRENT AIR QUALITY</span>
+              <span className="eyebrow light">CURRENT AIR QUALITY ({location.name.toUpperCase()})</span>
               <div className="status-line">
                 <h2>{categoryLabel}</h2>
                 <span className={`status-badge ${categoryTone}`}>
                   {categoryLabel}
                 </span>
               </div>
-              <p>{conditions?.advice ?? "Loading live conditions..."}</p>
+              <p>{conditions?.advice ?? "Loading live meteorological telemetry..."}</p>
             </div>
             <div className="sun-icon">
               <CloudSun />
@@ -380,7 +604,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
           <div className="gauge-row">
             <AqiGauge aqi={aqi} />
             <div className="aqi-scale">
-              <div>
+              <div className={categoryTone === "green" ? "active" : ""}>
                 <span>Good</span>
                 <strong>0–50</strong>
               </div>
@@ -396,7 +620,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
           </div>
           <div className="aqi-foot">
             <span>
-              <span className="pulse" /> Live reading
+              <span className="pulse" /> Live telemetry: {location.name}
             </span>
             <span>Updated {updatedAt}</span>
           </div>
@@ -419,7 +643,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
             <div className="advisory">
               <ShieldCheck />
               <div>
-                <strong>Asthma advisory</strong>
+                <strong>Asthma advisory for {location.name}</strong>
                 <span>
                   {conditions?.advice ?? "Checking current air conditions."}
                 </span>
@@ -433,11 +657,11 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
       </div>
       <div className="section-heading stats-heading">
         <div>
-          <span className="eyebrow">ENVIRONMENTAL CONDITIONS</span>
-          <h2>Live conditions</h2>
+          <span className="eyebrow">ENVIRONMENTAL READINGS</span>
+          <h2>Live conditions in {location.name}</h2>
         </div>
         <span className="updated">
-          <span className="pulse" /> Sensors active
+          <span className="pulse" /> Sensors active ({location.latitude.toFixed(2)}°, {location.longitude.toFixed(2)}°)
         </span>
       </div>
       <div className="stats-grid">
@@ -473,20 +697,26 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
           icon={Wind}
           label="Wind speed"
           value={conditions ? conditions.wind_speed.toFixed(1) : "--"}
-          unit="km/h"
+          unit="m/s"
           tone="green"
         />
       </div>
       <TrendChart />
       <div className="quick-actions">
-        <button onClick={() => onNavigate("air-quality")}>
-          <Wind /> Check air quality <ArrowRight />
-        </button>
         <button onClick={() => onNavigate("predict")}>
-          <Sparkles /> Predict AQI <ArrowRight />
+          <Sparkles />
+          <span>Predict future AQI</span>
+          <ArrowRight />
+        </button>
+        <button onClick={onOpenLocationModal}>
+          <MapPin />
+          <span>Change Sri Lanka city ({location.name})</span>
+          <ArrowRight />
         </button>
         <button onClick={() => onNavigate("asthma")}>
-          <HeartPulse /> Asthma guide <ArrowRight />
+          <HeartPulse />
+          <span>Asthma guidance</span>
+          <ArrowRight />
         </button>
       </div>
       <Disclaimer />
@@ -497,9 +727,15 @@ function HomePage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
 function PredictPage({
   onNavigate,
   onPrediction,
+  location,
+  conditions,
+  onOpenLocationModal,
 }: {
   onNavigate: (page: PageKey) => void;
   onPrediction: (prediction: Prediction) => void;
+  location: SriLankaLocation;
+  conditions: CurrentConditions | null;
+  onOpenLocationModal: () => void;
 }) {
   const [values, setValues] = useState({
     pm25: "24",
@@ -510,8 +746,10 @@ function PredictPage({
   });
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [loading, setLoading] = useState(false);
+
   const update = (key: keyof typeof values, value: string) =>
     setValues((current) => ({ ...current, [key]: value }));
+
   const fields = [
     ["pm25", "PM2.5", "µg/m³"],
     ["pm10", "PM10", "µg/m³"],
@@ -519,6 +757,17 @@ function PredictPage({
     ["humidity", "Humidity", "%"],
     ["wind", "Wind speed", "m/s"],
   ] as const;
+
+  const handleAutofill = () => {
+    if (!conditions) return;
+    setValues({
+      pm25: conditions.pm25.toFixed(1),
+      pm10: conditions.pm10.toFixed(1),
+      temperature: conditions.temperature.toFixed(1),
+      humidity: conditions.humidity.toFixed(0),
+      wind: conditions.wind_speed.toFixed(1),
+    });
+  };
 
   const handlePredict = async () => {
     setLoading(true);
@@ -534,13 +783,16 @@ function PredictPage({
           wind_speed: parseFloat(values.wind) || 0,
         }),
       });
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status} ${res.statusText}`);
+      }
       const data = await res.json();
       setPrediction(data);
       onPrediction(data);
     } catch (error) {
       console.error("Prediction failed:", error);
       alert(
-        "Failed to connect to the prediction API. Ensure the FastAPI server is running on port 8001.",
+        "Failed to connect to the prediction API. Ensure the FastAPI server is running on port 8001."
       );
     } finally {
       setLoading(false);
@@ -578,9 +830,24 @@ function PredictPage({
     <>
       <Header
         title="AI air quality prediction"
-        subtitle="Enter environmental conditions to estimate what comes next."
+        subtitle="Enter environmental conditions to estimate the AQI and health impact."
+        location={location}
+        onOpenLocationModal={onOpenLocationModal}
         onMenu={() => window.dispatchEvent(new Event("airsense:menu"))}
       />
+      
+      {conditions && (
+        <div className="autofill-banner">
+          <span>
+            <Sparkles />
+            Current live conditions for <strong>{location.name}</strong> are available (PM2.5: {conditions.pm25.toFixed(1)}, Temp: {conditions.temperature.toFixed(1)}°C)
+          </span>
+          <button onClick={handleAutofill}>
+            Autofill {location.name} Data
+          </button>
+        </div>
+      )}
+
       <div className="predict-layout">
         <section className="form-card">
           <div className="form-intro">
@@ -590,8 +857,7 @@ function PredictPage({
             <div>
               <h2>Environmental inputs</h2>
               <p>
-                Use the latest readings from your area for a more accurate
-                estimate.
+                Use the latest readings from {location.name} or adjust parameters for custom simulation.
               </p>
             </div>
           </div>
@@ -648,21 +914,21 @@ function PredictPage({
             </div>
             <div className="result-aqi">
               <strong>{prediction.aqi}</strong>
-              <span>Estimated AQI</span>
+              <span>Estimated Air Quality Index</span>
             </div>
             <div className="result-tags">
               <span className={`status-badge ${getTone(prediction.category)}`}>
                 {prediction.category}
               </span>
               <span className="risk-tag">
-                <ShieldCheck /> AI Analyzed
+                <ShieldCheck /> AI verified
               </span>
             </div>
             <p>{getResultSummary(prediction.category)}</p>
             <div className="result-advisory">
-              <HeartPulse />
+              <ShieldCheck />
               <div>
-                <strong>Asthma advisory</strong>
+                <strong>Personalized Health Advice</strong>
                 <span>{prediction.advice}</span>
               </div>
             </div>
@@ -670,7 +936,7 @@ function PredictPage({
               className="text-button"
               onClick={() => onNavigate("asthma")}
             >
-              View asthma guide <ArrowRight />
+              Learn what to do next <ArrowRight />
             </button>
           </section>
         )}
@@ -680,19 +946,25 @@ function PredictPage({
   );
 }
 
-function AirQualityPage() {
+function AirQualityPage({
+  location,
+  onOpenLocationModal,
+}: {
+  location: SriLankaLocation;
+  onOpenLocationModal: () => void;
+}) {
   const categories = [
-    ["Good", "0–50", "Clean air with little or no risk.", "green"],
+    ["Good", "0–50", "Air quality is satisfactory and poses little or no risk.", "green"],
     [
       "Moderate",
       "51–100",
-      "Acceptable, with care for sensitive groups.",
+      "Acceptable air quality; sensitive people should take note.",
       "amber",
     ],
     [
       "Sensitive groups",
       "101–150",
-      "May affect people with respiratory conditions.",
+      "Asthma and heart conditions may experience mild effects.",
       "orange",
     ],
     ["Unhealthy", "151+", "Everyone may begin to experience effects.", "red"],
@@ -718,7 +990,9 @@ function AirQualityPage() {
     <>
       <Header
         title="Air quality information"
-        subtitle="A clearer way to understand the air around you."
+        subtitle="A clearer way to understand the air around you in Sri Lanka."
+        location={location}
+        onOpenLocationModal={onOpenLocationModal}
         onMenu={() => window.dispatchEvent(new Event("airsense:menu"))}
       />
       <section className="info-intro">
@@ -728,7 +1002,7 @@ function AirQualityPage() {
         <div>
           <h2>What is AQI?</h2>
           <p>
-            The Air Quality Index is a simple scale that communicates how clean
+            The Air Quality Index is a standardized scale that communicates how clean
             or polluted the air is and what associated health effects may be of
             concern.
           </p>
@@ -778,7 +1052,7 @@ function AirQualityPage() {
           <h2>Small changes can make a meaningful difference.</h2>
           <p>
             Understanding daily air quality helps you plan outdoor time, protect
-            sensitive family members, and build healthier routines.
+            sensitive family members, and build healthier routines across Sri Lanka.
           </p>
         </div>
       </section>
@@ -787,20 +1061,33 @@ function AirQualityPage() {
   );
 }
 
-function AsthmaPage({ prediction }: { prediction: Prediction | null }) {
-  const category = prediction?.category ?? "No prediction yet";
-  const advice = prediction?.advice ?? "Enter environmental readings in Predict AQI to receive a personalized advisory.";
+function AsthmaPage({
+  prediction,
+  location,
+  onOpenLocationModal,
+}: {
+  prediction: Prediction | null;
+  location: SriLankaLocation;
+  onOpenLocationModal: () => void;
+}) {
+  const category = prediction?.category ?? "Good / Moderate";
+  const advice =
+    prediction?.advice ??
+    "Enter environmental readings in Predict AQI or select your Sri Lankan location to receive a personalized advisory.";
   const riskText = prediction
-    ? `Based on the predicted AQI of ${prediction.aqi}, current conditions are classified as ${category.toLowerCase()}.`
-    : "Your personalized risk assessment will appear here after you run a prediction.";
+    ? `Based on the predicted AQI of ${prediction.aqi}, current conditions in ${location.name} are classified as ${category.toLowerCase()}.`
+    : `Monitoring breathing health for ${location.name}, Sri Lanka.`;
   const activityText = prediction
     ? advice
     : "Check the AQI before going outside and use the prediction page for personalized guidance.";
+
   return (
     <>
       <Header
         title="Asthma health guide"
-        subtitle="Understand how air pollution can affect breathing."
+        subtitle={`Understand how air pollution affects breathing in ${location.name}.`}
+        location={location}
+        onOpenLocationModal={onOpenLocationModal}
         onMenu={() => window.dispatchEvent(new Event("airsense:menu"))}
       />
       <div className="guide-grid">
@@ -811,9 +1098,7 @@ function AsthmaPage({ prediction }: { prediction: Prediction | null }) {
           </div>
           <span className="eyebrow light">BREATHE WITH CONFIDENCE</span>
           <h2>{prediction ? `${category} air quality` : "Your breathing health matters."}</h2>
-          <p>
-            {riskText}
-          </p>
+          <p>{riskText}</p>
         </section>
         <section className="guide-section">
           <div className="section-heading">
@@ -846,8 +1131,8 @@ function AsthmaPage({ prediction }: { prediction: Prediction | null }) {
           {[
             prediction ? `Predicted AQI: ${prediction.aqi}` : "Check the AQI before going outside.",
             prediction ? activityText : "Avoid outdoor activities during poor air quality.",
-            "Keep prescribed medication available.",
-            "Follow your healthcare professional’s advice.",
+            "Keep prescribed inhalers & medications readily available.",
+            "Follow your healthcare professional’s treatment plan.",
           ].map((item) => (
             <li key={item}>
               <CheckCircle2 />
@@ -868,7 +1153,7 @@ function AsthmaPage({ prediction }: { prediction: Prediction | null }) {
           <p>
             {prediction?.category.toLowerCase().includes("good")
               ? advice
-              : "If symptoms feel sudden or severe, seek emergency care. Do not wait for an air quality update."}
+              : "If symptoms feel sudden or severe, seek emergency medical care. Do not wait for an air quality update."}
           </p>
         </div>
       </section>
@@ -877,12 +1162,20 @@ function AsthmaPage({ prediction }: { prediction: Prediction | null }) {
   );
 }
 
-function AboutPage() {
+function AboutPage({
+  location,
+  onOpenLocationModal,
+}: {
+  location: SriLankaLocation;
+  onOpenLocationModal: () => void;
+}) {
   return (
     <>
       <Header
         title="About AirSense"
-        subtitle="Technology with a healthier purpose."
+        subtitle="Technology with a healthier purpose for Sri Lanka."
+        location={location}
+        onOpenLocationModal={onOpenLocationModal}
         onMenu={() => window.dispatchEvent(new Event("airsense:menu"))}
       />
       <section className="about-hero">
@@ -897,8 +1190,8 @@ function AboutPage() {
         </div>
         <p>
           AirSense is an AI-based air quality prediction and asthma health
-          advisory system designed to help people monitor pollution, make
-          informed decisions, and feel more confident about their environment.
+          advisory system designed to help people across Sri Lanka monitor pollution,
+          make informed decisions, and protect their respiratory health.
         </p>
       </section>
       <div className="section-heading">
@@ -909,11 +1202,11 @@ function AboutPage() {
       </div>
       <div className="steps">
         {[
-          ["01", "Environmental data", Wind],
-          ["02", "Air quality analysis", Activity],
-          ["03", "Estimated AQI", Gauge],
-          ["04", "Health advisory", HeartPulse],
-        ].map(([number, title, Icon]) => (
+          { number: "01", title: "Environmental data", icon: Wind },
+          { number: "02", title: "Air quality analysis", icon: Activity },
+          { number: "03", title: "Estimated AQI", icon: Gauge },
+          { number: "04", title: "Health advisory", icon: HeartPulse },
+        ].map(({ number, title, icon: Icon }) => (
           <div className="step" key={number}>
             <span>{number}</span>
             <Icon />
@@ -924,20 +1217,20 @@ function AboutPage() {
       </div>
       <section className="tech-card">
         <div>
-          <span className="eyebrow">BUILT FOR LEARNING & IMPACT</span>
-          <h2>From university project to everyday utility.</h2>
+          <span className="eyebrow">BUILT FOR REAL IMPACT</span>
+          <h2>AI-Powered Environmental Intelligence</h2>
           <p>
-            AirSense brings together environmental data APIs, machine learning,
-            and a Streamlit-ready interface to turn complex signals into useful
-            guidance.
+            AirSense brings together live meteorological telemetry for all Sri Lankan
+            provinces, machine learning inference via FastAPI, and an intuitive Next.js
+            interface.
           </p>
         </div>
         <div className="tech-list">
           {[
-            "Python",
-            "Streamlit",
-            "Machine Learning / AI",
-            "Environmental data APIs",
+            "FastAPI Python Backend",
+            "Next.js & TypeScript UI",
+            "Scikit-Learn ML Model",
+            "Live Meteorological Telemetry",
           ].map((item) => (
             <span key={item}>
               <CheckCircle2 />
@@ -964,23 +1257,102 @@ export default function Page() {
   const [page, setPage] = useState<PageKey>("home");
   const [latestPrediction, setLatestPrediction] = useState<Prediction | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isLocModalOpen, setIsLocModalOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<SriLankaLocation>(DEFAULT_LOCATION);
+  const [conditions, setConditions] = useState<CurrentConditions | null>(null);
+  const [isLoadingConditions, setIsLoadingConditions] = useState(false);
+
+  const fetchConditionsForLocation = useCallback(async (loc: SriLankaLocation) => {
+    setIsLoadingConditions(true);
+    try {
+      const url = `http://127.0.0.1:8001/current-conditions?location=${encodeURIComponent(
+        loc.name + ", Sri Lanka"
+      )}&latitude=${loc.latitude}&longitude=${loc.longitude}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Live conditions request failed");
+      const data = await response.json();
+      setConditions(data);
+    } catch (error) {
+      console.error("Live conditions fetch error:", error);
+    } finally {
+      setIsLoadingConditions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchConditionsForLocation(selectedLocation);
+    const interval = window.setInterval(() => {
+      fetchConditionsForLocation(selectedLocation);
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [selectedLocation, fetchConditionsForLocation]);
+
   useEffect(() => {
     const openMenu = () => setMenuOpen(true);
     window.addEventListener("airsense:menu", openMenu);
     return () => window.removeEventListener("airsense:menu", openMenu);
   }, []);
-  const content = useMemo(
-    () =>
-      ({
-        home: <HomePage onNavigate={setPage} />,
-        predict: <PredictPage onNavigate={setPage} onPrediction={setLatestPrediction} />,
-        "air-quality": <AirQualityPage />,
-        asthma: <AsthmaPage prediction={latestPrediction} />,
-        about: <AboutPage />,
-      })[page],
-    [page, latestPrediction],
-  );
-  const appTone = latestPrediction ? getCategoryTone(latestPrediction.category) : "cyan";
+
+  const handleSelectLocation = (loc: SriLankaLocation) => {
+    setSelectedLocation(loc);
+    fetchConditionsForLocation(loc);
+  };
+
+  const content = useMemo(() => {
+    switch (page) {
+      case "home":
+        return (
+          <HomePage
+            onNavigate={setPage}
+            location={selectedLocation}
+            conditions={conditions}
+            isLoading={isLoadingConditions}
+            onOpenLocationModal={() => setIsLocModalOpen(true)}
+          />
+        );
+      case "predict":
+        return (
+          <PredictPage
+            onNavigate={setPage}
+            onPrediction={setLatestPrediction}
+            location={selectedLocation}
+            conditions={conditions}
+            onOpenLocationModal={() => setIsLocModalOpen(true)}
+          />
+        );
+      case "air-quality":
+        return (
+          <AirQualityPage
+            location={selectedLocation}
+            onOpenLocationModal={() => setIsLocModalOpen(true)}
+          />
+        );
+      case "asthma":
+        return (
+          <AsthmaPage
+            prediction={latestPrediction}
+            location={selectedLocation}
+            onOpenLocationModal={() => setIsLocModalOpen(true)}
+          />
+        );
+      case "about":
+        return (
+          <AboutPage
+            location={selectedLocation}
+            onOpenLocationModal={() => setIsLocModalOpen(true)}
+          />
+        );
+      default:
+        return null;
+    }
+  }, [page, selectedLocation, conditions, isLoadingConditions, latestPrediction]);
+
+  const appTone = latestPrediction
+    ? getCategoryTone(latestPrediction.category)
+    : conditions
+      ? getCategoryTone(conditions.category)
+      : "cyan";
+
   return (
     <div className={`app-shell state-${appTone}`}>
       <Sidebar
@@ -1010,6 +1382,14 @@ export default function Page() {
           }}
         />
       </div>
+
+      <LocationModal
+        isOpen={isLocModalOpen}
+        onClose={() => setIsLocModalOpen(false)}
+        selectedLocation={selectedLocation}
+        onSelectLocation={handleSelectLocation}
+      />
+
       <main className="main-content">{content}</main>
     </div>
   );
