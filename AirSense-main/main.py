@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import joblib
 import pandas as pd
 import os
@@ -30,11 +30,11 @@ app.add_middleware(
 )
 
 class PredictionRequest(BaseModel):
-    pm25: float
-    pm10: float
-    temperature: float
-    humidity: float
-    wind_speed: float
+    pm25: float = Field(..., ge=0.0, le=1000.0, description="PM2.5 concentration in µg/m³ (0-1000)")
+    pm10: float = Field(..., ge=0.0, le=1500.0, description="PM10 concentration in µg/m³ (0-1500)")
+    temperature: float = Field(..., ge=-10.0, le=60.0, description="Temperature in °C (-10 to 60)")
+    humidity: float = Field(..., ge=0.0, le=100.0, description="Relative humidity in % (0-100)")
+    wind_speed: float = Field(..., ge=0.0, le=150.0, description="Wind speed in m/s (0-150)")
 
 class PredictionResponse(BaseModel):
     aqi: float
@@ -102,6 +102,7 @@ def predict_values(pm25: float, pm10: float, temperature: float, humidity: float
 def predict_aqi(data: PredictionRequest):
     try:
         predicted_aqi = predict_values(data.pm25, data.pm10, data.temperature, data.humidity, data.wind_speed)
+        predicted_aqi = max(0.0, predicted_aqi)
         category, advice = determine_category_and_advice(predicted_aqi)
         
         return PredictionResponse(
@@ -110,11 +111,8 @@ def predict_aqi(data: PredictionRequest):
             advice=advice
         )
     except Exception as e:
-        # Fallback in case of a feature mismatch or prediction error
         print(f"Prediction error: {e}")
-        fallback_aqi = 33.45 # Same as Streamlit default
-        cat, adv = determine_category_and_advice(fallback_aqi)
-        return PredictionResponse(aqi=fallback_aqi, category=cat, advice=adv)
+        raise HTTPException(status_code=400, detail=f"Prediction calculation failed: {str(e)}")
 
 # Curated list of major Sri Lankan locations with precise geographical coordinates
 SRI_LANKA_LOCATIONS = [

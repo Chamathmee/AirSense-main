@@ -99,28 +99,46 @@ with st.container():
     
     col1, col2 = st.columns(2)
     with col1:
-        pm25 = st.number_input("PM2.5 (µg/m³)", value=st.session_state.pm25, step=0.5)
-        temperature = st.number_input("Temperature (°C)", value=st.session_state.temp, step=0.5)
+        pm25 = st.number_input("PM2.5 (µg/m³)", value=float(st.session_state.pm25), min_value=0.0, max_value=1000.0, step=0.5, help="Valid range: 0 to 1000 µg/m³")
+        temperature = st.number_input("Temperature (°C)", value=float(st.session_state.temp), min_value=-10.0, max_value=60.0, step=0.5, help="Valid range: -10°C to 60°C")
     with col2:
-        pm10 = st.number_input("PM10 (µg/m³)", value=st.session_state.pm10, step=0.5)
-        humidity = st.number_input("Humidity (%)", value=st.session_state.humidity, step=1.0)
+        pm10 = st.number_input("PM10 (µg/m³)", value=float(st.session_state.pm10), min_value=0.0, max_value=1500.0, step=0.5, help="Valid range: 0 to 1500 µg/m³")
+        humidity = st.number_input("Humidity (%)", value=float(st.session_state.humidity), min_value=0.0, max_value=100.0, step=1.0, help="Valid range: 0% to 100%")
         
-    wind = st.number_input("Wind Speed (m/s)", value=st.session_state.wind, step=0.1)
+    wind = st.number_input("Wind Speed (m/s)", value=float(st.session_state.wind), min_value=0.0, max_value=150.0, step=0.1, help="Valid range: 0 to 150 m/s")
 
     if st.button("✨ Predict Air Quality"):
-        if model is not None:
-            try:
-                feats = pd.DataFrame(
-                    [[pm25, pm10, temperature, humidity, wind]],
-                    columns=['PM2.5', 'PM10', 'Temp_C', 'Humidity_%', 'Wind_Speed_mps']
-                )
-                predicted_aqi = float(model.predict(feats)[0])
-            except Exception:
-                predicted_aqi = (pm25 * 1.5) + (pm10 * 0.8) + (temperature * 0.5)
-        else:
-            predicted_aqi = (pm25 * 1.5) + (pm10 * 0.8) + (temperature * 0.5)
+        # Validate inputs
+        validation_errors = []
+        if pm25 < 0 or pm25 > 1000:
+            validation_errors.append("PM2.5 must be between 0 and 1000 µg/m³.")
+        if pm10 < 0 or pm10 > 1500:
+            validation_errors.append("PM10 must be between 0 and 1500 µg/m³.")
+        if temperature < -10 or temperature > 60:
+            validation_errors.append("Temperature must be between -10°C and 60°C.")
+        if humidity < 0 or humidity > 100:
+            validation_errors.append("Humidity must be between 0% and 100%.")
+        if wind < 0 or wind > 150:
+            validation_errors.append("Wind speed must be between 0 and 150 m/s.")
 
-        category, advice, color_hex = determine_category_and_advice(predicted_aqi)
+        if validation_errors:
+            for err in validation_errors:
+                st.error(f"⚠️ {err}")
+        else:
+            if model is not None:
+                try:
+                    feats = pd.DataFrame(
+                        [[pm25, pm10, temperature, humidity, wind]],
+                        columns=['PM2.5', 'PM10', 'Temp_C', 'Humidity_%', 'Wind_Speed_mps']
+                    )
+                    predicted_aqi = float(model.predict(feats)[0])
+                except Exception:
+                    predicted_aqi = (pm25 * 1.5) + (pm10 * 0.8) + (temperature * 0.5)
+            else:
+                predicted_aqi = (pm25 * 1.5) + (pm10 * 0.8) + (temperature * 0.5)
+
+            predicted_aqi = max(0.0, predicted_aqi)
+            category, advice, color_hex = determine_category_and_advice(predicted_aqi)
 
         st.markdown(
             f"""
