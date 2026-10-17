@@ -162,3 +162,27 @@ The following 10 UI screenshots provide visual verification for the final report
 * **What Must Be Visible:** Purpose statement banner, four-step process flow diagram (01 Environmental Data $\to$ 02 Air Quality Analysis $\to$ 03 Estimated AQI $\to$ 04 Health Advisory), technical stack badges (FastAPI Python Backend, Next.js & TypeScript UI, Scikit-Learn ML Model, Live Meteorological Telemetry), and permanent medical disclaimer footer.
 * **Related Test Case IDs:** TC-16, TC-20.
 * **Figure Caption:** *Figure 5.10: About view illustrating the operational methodology, system architecture components, and healthcare disclaimer.*
+
+* ### 5.2.1 Automated AQI Prediction API Testing
+
+Automated tests were implemented using `pytest` and FastAPI's `TestClient` to verify the AQI prediction endpoint and selected input validation scenarios. The tests were executed through GitHub Actions on the `feature/aqi-prediction-integration` branch.
+
+| Test ID | Test Description | Expected Result | Actual Result | Status |
+|---|---|---|---|---|
+| AT-01 | Submit valid environmental input values to `/predict` | HTTP 200 response containing AQI, category, and advice | Expected response fields were present | PASS |
+| AT-02 | Submit a non-numeric PM2.5 value | HTTP 422 validation response | HTTP 422 returned | PASS |
+| AT-03 | Submit a negative PM2.5 value | HTTP 422 validation response | HTTP 422 returned | PASS |
+| AT-04 | Submit a request with a missing required field | HTTP 422 validation response | HTTP 422 returned | PASS |
+
+**Automated Test Execution Summary**
+
+- Total tests executed: 4
+- Tests passed: 4
+- Tests failed: 0
+- Test execution time: 1.69 seconds
+- Automation platform: GitHub Actions
+- Overall result: Successful
+
+A deprecation warning related to the use of `httpx` with Starlette's `TestClient` was reported during execution. The warning did not cause test failures. Dependency compatibility should be reviewed in a future maintenance update.
+
+These tests verify normal API request handling and selected input validation cases. They do not independently establish machine learning model accuracy or verify every system function.
