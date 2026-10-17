@@ -79,3 +79,10 @@ button { cursor: pointer; }
 .app-shell.state-green { --cyan: #65d6a1; --line: rgba(101, 214, 161, .22); }
 .app-shell.state-amber { --cyan: #f4bd58; --line: rgba(244, 189, 88, .24); }
 .app-shell.state-red { --cyan: #e77777; --line: rgba(231, 119, 119, .25); }
+.status-badge.red { color: var(--red); border: 1px solid rgba(231, 119, 119, .35); background: rgba(231, 119, 119, .12); }
+.aqi-scale .active-green { color: var(--green); }
+.aqi-scale .active-green strong { color: #8ae5ba; }
+.aqi-scale .active-amber { color: var(--amber); }
+.aqi-scale .active-amber strong { color: #f3cf84; }
+.aqi-scale .active-red { color: var(--red); }
+.aqi-scale .active-red strong { color: #f19a9a; }

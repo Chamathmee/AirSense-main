@@ -715,15 +715,15 @@ function HomePage({
           <div className="gauge-row">
             <AqiGauge aqi={aqi} />
             <div className="aqi-scale">
-              <div className={categoryTone === "green" ? "active" : ""}>
+              <div className={categoryTone === "green" ? "active active-green" : ""}>
                 <span>Good</span>
                 <strong>0–50</strong>
               </div>
-              <div className={categoryTone === "amber" ? "active" : ""}>
+              <div className={categoryTone === "amber" ? "active active-amber" : ""}>
                 <span>Moderate</span>
                 <strong>51–100</strong>
               </div>
-              <div className={categoryTone === "red" ? "active" : ""}>
+              <div className={categoryTone === "red" ? "active active-red" : ""}>
                 <span>Unhealthy</span>
                 <strong>101+</strong>
               </div>
