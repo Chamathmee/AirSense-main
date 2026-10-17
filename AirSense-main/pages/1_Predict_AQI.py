@@ -57,12 +57,20 @@ st.write("Select a Sri Lankan location to load live meteorological data or enter
 
 col_loc, col_btn = st.columns([3, 1])
 with col_loc:
-    selected_city = st.selectbox("📍 Select Sri Lankan Location", list(SRI_LANKA_CITIES.keys()), index=0)
+    selected_city = st.selectbox(
+        "📍 Select Sri Lankan Location",
+        list(SRI_LANKA_CITIES.keys()),
+        index=0,
+        help="Select a monitored city or region in Sri Lanka to retrieve geo-coordinates for live weather and air quality feeds."
+    )
 
 with col_btn:
     st.write("")
     st.write("")
-    fetch_live = st.button("🔄 Fetch Live Location Data")
+    fetch_live = st.button(
+        "🔄 Fetch Live Location Data",
+        help="Query the Open-Meteo Air Quality and Weather API to retrieve real-time telemetry for the selected location."
+    )
 
 # Session state defaults
 if "pm25" not in st.session_state:
@@ -99,15 +107,50 @@ with st.container():
     
     col1, col2 = st.columns(2)
     with col1:
-        pm25 = st.number_input("PM2.5 (µg/m³)", value=float(st.session_state.pm25), min_value=0.0, max_value=1000.0, step=0.5, help="Valid range: 0 to 1000 µg/m³")
-        temperature = st.number_input("Temperature (°C)", value=float(st.session_state.temp), min_value=-10.0, max_value=60.0, step=0.5, help="Valid range: -10°C to 60°C")
+        pm25 = st.number_input(
+            "PM2.5 (µg/m³)",
+            value=float(st.session_state.pm25),
+            min_value=0.0,
+            max_value=1000.0,
+            step=0.5,
+            help="Fine inhalable particulate matter (diameter ≤ 2.5 µm). Can penetrate deep into lung tissue and the bloodstream. WHO guideline: < 15 µg/m³ (24h mean)."
+        )
+        temperature = st.number_input(
+            "Temperature (°C)",
+            value=float(st.session_state.temp),
+            min_value=-10.0,
+            max_value=60.0,
+            step=0.5,
+            help="Ambient surface temperature in degrees Celsius (°C). Higher temperatures can accelerate photochemical smog formation."
+        )
     with col2:
-        pm10 = st.number_input("PM10 (µg/m³)", value=float(st.session_state.pm10), min_value=0.0, max_value=1500.0, step=0.5, help="Valid range: 0 to 1500 µg/m³")
-        humidity = st.number_input("Humidity (%)", value=float(st.session_state.humidity), min_value=0.0, max_value=100.0, step=1.0, help="Valid range: 0% to 100%")
+        pm10 = st.number_input(
+            "PM10 (µg/m³)",
+            value=float(st.session_state.pm10),
+            min_value=0.0,
+            max_value=1500.0,
+            step=0.5,
+            help="Coarse particulate matter (diameter ≤ 10 µm) such as dust, pollen, and smoke. Irritates eyes and respiratory pathways. WHO guideline: < 45 µg/m³ (24h mean)."
+        )
+        humidity = st.number_input(
+            "Humidity (%)",
+            value=float(st.session_state.humidity),
+            min_value=0.0,
+            max_value=100.0,
+            step=1.0,
+            help="Relative humidity percentage (%). Elevated humidity can trap suspended particulates and airborne allergens near ground level."
+        )
         
-    wind = st.number_input("Wind Speed (m/s)", value=float(st.session_state.wind), min_value=0.0, max_value=150.0, step=0.1, help="Valid range: 0 to 150 m/s")
+    wind = st.number_input(
+        "Wind Speed (m/s)",
+        value=float(st.session_state.wind),
+        min_value=0.0,
+        max_value=150.0,
+        step=0.1,
+        help="Surface wind velocity in meters per second (m/s). Stronger winds facilitate atmospheric mixing and pollutant dispersion."
+    )
 
-    if st.button("✨ Predict Air Quality"):
+    if st.button("✨ Predict Air Quality", help="Calculate predicted AQI using trained regression model and generate tailored asthma health advisories."):
         # Validate inputs
         validation_errors = []
         if pm25 < 0 or pm25 > 1000:
