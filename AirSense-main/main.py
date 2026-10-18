@@ -74,17 +74,24 @@ DEFAULT_CONDITIONS = {
     "wind_speed": 11.2,
 }
 
-def determine_category_and_advice(aqi: float):
-    if aqi <= 50:
-        return "GOOD", "Normal outdoor activities can continue. Air quality is acceptable."
-    elif aqi <= 100:
-        return "MODERATE", "Unusually sensitive people should consider reducing prolonged or heavy exertion outdoors."
-    elif aqi <= 150:
-        return "UNHEALTHY FOR SENSITIVE GROUPS", "Asthma patients should limit outdoor activities and keep medication nearby."
-    elif aqi <= 200:
-        return "UNHEALTHY", "Everyone may begin to experience health effects; asthma patients should stay indoors."
+def determine_category_and_advice(aqi: float) -> tuple[str, str]:
+    """
+    Map predicted numerical AQI to standard health categories and asthma advisories.
+    
+    Adheres to EPA Air Quality Index break points and clinical guidance for
+    individuals with respiratory illnesses, chronic asthma, and particulate sensitivity.
+    """
+    clean_aqi = max(0.0, float(aqi))
+    if clean_aqi <= 50.0:
+        return "GOOD", "Normal outdoor activities can continue. Air quality poses little to no risk."
+    elif clean_aqi <= 100.0:
+        return "MODERATE", "Air quality is acceptable. Unusually sensitive individuals should monitor outdoor exertion."
+    elif clean_aqi <= 150.0:
+        return "UNHEALTHY FOR SENSITIVE GROUPS", "Asthma patients and elderly should limit prolonged outdoor exertion and keep quick-relief inhalers accessible."
+    elif clean_aqi <= 200.0:
+        return "UNHEALTHY", "Health warning: Everyone may experience symptoms. Asthma patients should stay indoors and run air purifiers."
     else:
-        return "VERY UNHEALTHY / HAZARDOUS", "Health alert: everyone may experience more serious health effects. Stay indoors."
+        return "VERY UNHEALTHY / HAZARDOUS", "Emergency health alert: Serious risk of respiratory distress. Avoid all outdoor physical activity."
 
 def predict_values(pm25: float, pm10: float, temperature: float, humidity: float, wind_speed: float) -> float:
     """
