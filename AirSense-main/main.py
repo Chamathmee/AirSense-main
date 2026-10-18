@@ -86,17 +86,31 @@ def determine_category_and_advice(aqi: float):
     else:
         return "VERY UNHEALTHY / HAZARDOUS", "Health alert: everyone may experience more serious health effects. Stay indoors."
 
-def predict_values(pm25: float, pm10: float, temperature: float, humidity: float, wind_speed: float):
+def predict_values(pm25: float, pm10: float, temperature: float, humidity: float, wind_speed: float) -> float:
+    """
+    Perform ML model inference to predict Air Quality Index (AQI).
+    
+    Constructs a 5-feature vector: [PM2.5, PM10, Temp_C, Humidity_%, Wind_Speed_mps]
+    and feeds it to the trained Scikit-Learn regression model. If model inference
+    fails or the model file is not present, applies a meteorological-adjusted
+    fallback regression formula.
+    """
     if model is not None:
         try:
             features = pd.DataFrame(
                 [[pm25, pm10, temperature, humidity, wind_speed]],
                 columns=['PM2.5', 'PM10', 'Temp_C', 'Humidity_%', 'Wind_Speed_mps']
             )
-            return float(model.predict(features)[0])
+            prediction = float(model.predict(features)[0])
+            return max(0.0, prediction)
         except Exception as e:
             print(f"Model prediction warning, using fallback formula: {e}")
-    return (pm25 * 1.5) + (pm10 * 0.8) + (temperature * 0.5)
+            
+    # Meteorological-adjusted fallback calculation
+    # PM2.5 and PM10 have primary weighting; wind speed provides atmospheric dispersion
+    dispersion_factor = max(0.8, 1.0 + (wind_speed * 0.05))
+    raw_aqi = (pm25 * 1.45) + (pm10 * 0.75) + (temperature * 0.3) + (humidity * 0.08)
+    return max(0.0, raw_aqi / dispersion_factor)
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict_aqi(data: PredictionRequest):
